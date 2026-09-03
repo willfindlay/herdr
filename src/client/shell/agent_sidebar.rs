@@ -304,21 +304,80 @@ fn render_agent_row(buffer: &mut Buffer, rect: Rect, row: &AgentRow, config: &Cl
     };
     for (index, tokens) in rows.iter().take(rect.height as usize).enumerate() {
         let indent = if index == 0 { 1 } else { 3 };
-        let mut spans = vec![ratatui::text::Span::raw(" ".repeat(indent))];
-        spans.extend(crate::ui::resolved_token_spans(
-            tokens,
+        let line_rect = Rect::new(rect.x, rect.y + index as u16, rect.width, 1);
+        let available = rect.width.saturating_sub(indent as u16) as usize;
+
+        let render_leading =
+            |buffer: &mut Buffer, tokens: &[crate::ui::ResolvedToken], max_width: usize| {
+                let mut spans = vec![ratatui::text::Span::raw(" ".repeat(indent))];
+                spans.extend(crate::ui::resolved_token_spans(
+                    tokens,
+                    icon,
+                    status_style,
+                    name_style,
+                    secondary,
+                    secondary,
+                    palette,
+                    max_width,
+                ));
+                Paragraph::new(Line::from(spans))
+                    .style(row_style)
+                    .render(line_rect, buffer);
+            };
+
+        // Most rows carry no git status, so they skip the split and its clones.
+        let has_git_status = tokens
+            .iter()
+            .any(|token| matches!(token.kind, crate::ui::ResolvedTokenKind::GitStatus { .. }));
+        if !has_git_status {
+            render_leading(buffer, tokens, available);
+            continue;
+        }
+
+        let leading = tokens
+            .iter()
+            .filter(|token| !matches!(token.kind, crate::ui::ResolvedTokenKind::GitStatus { .. }))
+            .cloned()
+            .collect::<Vec<_>>();
+        let trailing = tokens
+            .iter()
+            .filter(|token| matches!(token.kind, crate::ui::ResolvedTokenKind::GitStatus { .. }))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let trailing_spans = crate::ui::resolved_token_spans(
+            &trailing,
             icon,
             status_style,
             name_style,
             secondary,
             secondary,
             palette,
-            rect.width.saturating_sub(indent as u16) as usize,
-        ));
-        Paragraph::new(Line::from(spans)).style(row_style).render(
-            Rect::new(rect.x, rect.y + index as u16, rect.width, 1),
-            buffer,
+            available,
         );
+        let trailing_width = trailing_spans
+            .iter()
+            .map(|span| display_width(span.content.as_ref()))
+            .sum::<usize>();
+
+        // The leading side needs a column of its own, or the budget drops its
+        // only flexible token instead of truncating it.
+        let leading_reserve = usize::from(!leading.is_empty());
+        if trailing_width + 1 + leading_reserve > available {
+            render_leading(buffer, &leading, available);
+            continue;
+        }
+
+        render_leading(buffer, &leading, available - trailing_width - 1);
+        let trailing_rect = Rect::new(
+            line_rect.right().saturating_sub(trailing_width as u16),
+            line_rect.y,
+            trailing_width as u16,
+            1,
+        );
+        Paragraph::new(Line::from(trailing_spans))
+            .style(row_style)
+            .render(trailing_rect, buffer);
     }
 }
 
