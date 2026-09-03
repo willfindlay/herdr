@@ -3241,6 +3241,7 @@ impl HeadlessServer {
             changed = true;
         }
 
+        self.app.poll_agent_cwds(now);
         changed |= self.app.handle_tab_bar_status_tasks(now);
 
         if geometry_dirty {
