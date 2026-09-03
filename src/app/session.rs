@@ -90,6 +90,7 @@ impl App {
             return;
         }
 
+        self.record_agent_cwds();
         run_session_save_job(self.capture_session_save_job());
         self.session_save_deadline = None;
     }

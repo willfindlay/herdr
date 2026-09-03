@@ -4,7 +4,8 @@ use std::time::Instant;
 use std::time::Duration;
 
 use super::{
-    background_update_check_enabled, App, AUTO_UPDATE_CHECK_INTERVAL, MIN_RENDER_INTERVAL,
+    background_update_check_enabled, App, AGENT_CWD_POLL_INTERVAL, AUTO_UPDATE_CHECK_INTERVAL,
+    MIN_RENDER_INTERVAL,
 };
 fn retain_detached_process_after_wait(
     pid: u32,
@@ -38,6 +39,56 @@ impl App {
         for terminal_id in terminal_ids {
             self.shutdown_terminal_runtime(terminal_id);
         }
+    }
+
+    /// Records the foreground cwd of terminals that host an agent.
+    ///
+    /// Runs on a coarse deadline and reads process state from the OS, so it
+    /// stays out of the render and PTY paths. Nothing clears the value when
+    /// the agent exits. The foreground cwd is only readable on Unix, so on
+    /// other platforms the poll records nothing.
+    pub(crate) fn poll_agent_cwds(&mut self, now: Instant) {
+        if now < self.next_agent_cwd_poll {
+            return;
+        }
+        self.next_agent_cwd_poll = now + AGENT_CWD_POLL_INTERVAL;
+        self.record_agent_cwds();
+    }
+
+    /// Reads the foreground cwd of each agent terminal once, regardless of
+    /// the poll deadline. The final save at shutdown calls this so a directory
+    /// change the poll has not seen yet still reaches the snapshot.
+    pub(crate) fn record_agent_cwds(&mut self) {
+        let mut changed = false;
+        for (terminal_id, terminal) in &mut self.state.terminals {
+            if !terminal.is_agent_terminal() {
+                continue;
+            }
+            let Some(cwd) = self
+                .terminal_runtimes
+                .get(terminal_id)
+                .and_then(|runtime| runtime.foreground_cwd())
+            else {
+                continue;
+            };
+            if terminal.agent_cwd.as_ref() != Some(&cwd) {
+                terminal.agent_cwd = Some(cwd);
+                changed = true;
+            }
+        }
+        if changed {
+            self.state.mark_session_dirty();
+        }
+    }
+
+    /// The agent cwd poll only matters while some terminal hosts an agent, so
+    /// a session without one does not wake for it.
+    fn agent_cwd_poll_deadline(&self) -> Option<Instant> {
+        self.state
+            .terminals
+            .values()
+            .any(crate::terminal::TerminalState::is_agent_terminal)
+            .then_some(self.next_agent_cwd_poll)
     }
 
     pub(crate) fn sync_agent_metadata_deadline(&mut self) {
@@ -157,6 +208,7 @@ impl App {
             self.next_auto_update_check,
             self.next_agent_manifest_update_check,
             self.agent_metadata_deadline,
+            self.agent_cwd_poll_deadline(),
             self.pending_agent_resume_deadline,
             self.session_save_deadline,
             self.next_tab_bar_status_deadline(),

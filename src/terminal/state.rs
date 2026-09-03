@@ -120,6 +120,11 @@ struct RecentAgentProcessExit {
 pub struct TerminalState {
     pub id: TerminalId,
     pub cwd: PathBuf,
+    /// Last foreground working directory observed while an agent occupied
+    /// this terminal. An agent can change directory without its shell
+    /// following, so the shell cwd is not enough to say where the agent was
+    /// working.
+    pub agent_cwd: Option<PathBuf>,
     pub detected_agent: Option<Agent>,
     pub fallback_state: AgentState,
     fallback_visible_blocker: bool,
@@ -154,6 +159,7 @@ impl TerminalState {
         Self {
             id,
             cwd,
+            agent_cwd: None,
             detected_agent: None,
             fallback_state: AgentState::Unknown,
             fallback_visible_blocker: false,
