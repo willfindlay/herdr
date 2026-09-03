@@ -219,7 +219,23 @@ pub struct AgentInfo {
     pub cwd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub foreground_cwd: Option<String>,
+    /// Git facts for the agent pane's checkout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_status: Option<GitCheckoutStatus>,
     pub revision: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct GitCheckoutStatus {
+    /// Commits ahead of the upstream branch. Omitted without an upstream.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ahead: Option<u64>,
+    /// Commits behind the upstream branch. Omitted without an upstream.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behind: Option<u64>,
+    /// Number of entries `git status` lists for the checkout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dirty: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

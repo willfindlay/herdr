@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "protocol": 21,
+  "protocol": 22,
   "schema_version": 1,
   "schemas": {
     "error_response": {
@@ -6620,6 +6620,17 @@
                 "null"
               ]
             },
+            "git_status": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/success_response/$defs/GitCheckoutStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Git facts for the agent pane's checkout."
+            },
             "interactive_ready": {
               "type": "boolean"
             },
@@ -7513,6 +7524,38 @@
             "layout_updated"
           ],
           "type": "string"
+        },
+        "GitCheckoutStatus": {
+          "properties": {
+            "ahead": {
+              "description": "Commits ahead of the upstream branch. Omitted without an upstream.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "behind": {
+              "description": "Commits behind the upstream branch. Omitted without an upstream.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "dirty": {
+              "description": "Number of entries `git status` lists for the checkout.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
         },
         "InstalledPluginInfo": {
           "properties": {

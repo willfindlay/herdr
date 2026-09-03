@@ -746,6 +746,8 @@ If no native session reference is stored, the field is omitted.
 
 `PaneInfo` and `AgentInfo` expose optional `terminal_title` and `terminal_title_stripped` fields. `terminal_title` is the latest OSC 0/2 title after safety normalization. `terminal_title_stripped` removes one recognized leading activity or spinner glyph and following whitespace. These server-owned values are ephemeral across a cold restart and are independent of the metadata `title` and semantic agent state.
 
+`AgentInfo` also exposes an optional `git_status` object with `ahead`, `behind`, and `dirty` counts for the agent pane's checkout, so two agents in different linked worktrees of one repository report their own counts. `ahead` and `behind` compare the branch with its upstream and are omitted without one. `dirty` is the number of entries `git status` lists. The object is omitted while no refresh has run or the pane sits outside a repository, and that refresh runs only while `ui.sidebar.agents.git_status.enabled` is set and the sidebar rows that agent resolves (its `rows_by_agent` override, or the default `rows` otherwise) include the `git_status` token.
+
 Use `pane.report_metadata` when a user hook wants to customize presentation without taking over lifecycle state from a Herdr integration.
 
 ```json

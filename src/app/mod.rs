@@ -834,6 +834,9 @@ impl App {
                 self.state.agent_panel_sort =
                     agent_panel_sort_from_config(config.ui.agent_panel_sort);
                 self.state.sidebar_agents = config.ui.sidebar.agents.clone();
+                // A pane whose rows lack the token gets no refresh, so counts
+                // an earlier one wrote would sit on the API until it closes.
+                self.state.clear_git_status_for_unwanted_terminals();
                 self.state.sidebar_spaces = config.ui.sidebar.spaces.clone();
                 self.state.sound = config.ui.sound.clone();
                 self.state.toast_config = config.ui.toast.clone();
@@ -1666,6 +1669,32 @@ mod tests {
         std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
         restore_xdg_state_home(original_xdg_state_home);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn reload_config_clears_agent_git_counts_without_demand() {
+        let _guard = config_env_lock().lock().unwrap();
+        let path = temp_config_path("reload-config-agent-git-status-off");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "[ui.sidebar.agents.git_status]\nenabled = false\n").unwrap();
+        std::env::set_var(crate::config::CONFIG_PATH_ENV_VAR, &path);
+
+        let mut app = test_app();
+        app.state.sidebar_agents.git_status.enabled = true;
+        app.state
+            .workspaces
+            .push(crate::workspace::Workspace::test_new("one"));
+        app.state.ensure_test_terminals();
+        let terminal = app.state.terminals.values_mut().next().unwrap();
+        terminal.git_ahead_behind = Some((1, 0));
+        terminal.git_dirty = Some(2);
+
+        let report = app.reload_config();
+
+        assert_eq!(report.status, crate::config::ConfigReloadStatus::Applied);
+        let terminal = app.state.terminals.values().next().unwrap();
+        assert_eq!(terminal.git_ahead_behind, None);
+        assert_eq!(terminal.git_dirty, None);
     }
 
     #[test]

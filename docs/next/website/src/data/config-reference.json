@@ -1056,6 +1056,12 @@
           "description": "Complete Agent-row overrides keyed by strict canonical agent id. Agents without an override use ui.sidebar.agents.rows."
         },
         {
+          "key": "ui.sidebar.agents.git_status.enabled",
+          "type": "boolean",
+          "default": "false",
+          "description": "Refresh Git status for each agent's checkout and show it through the git_status agent token. Off by default because it runs git status in the background for each agent checkout."
+        },
+        {
           "key": "ui.sidebar.spaces.row_gap",
           "type": "integer",
           "default": "0",

@@ -111,6 +111,13 @@ pub(super) fn snapshot(
                 state_labels,
                 tokens,
                 focused: agent.focused,
+                git_ahead_behind: agent
+                    .git_status
+                    .and_then(|status| Some((status.ahead? as usize, status.behind? as usize))),
+                git_dirty: agent
+                    .git_status
+                    .and_then(|status| status.dirty)
+                    .map(|dirty| dirty as usize),
             }
         })
         .collect();

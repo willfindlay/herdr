@@ -110,6 +110,7 @@ pub enum AgentSidebarToken {
     Agent,
     TerminalTitle,
     TerminalTitleStripped,
+    GitStatus,
     Custom(String),
     Styled {
         token: Box<AgentSidebarToken>,
@@ -240,6 +241,7 @@ fn agent_token_name(token: &AgentSidebarToken) -> String {
         AgentSidebarToken::Agent => "agent".into(),
         AgentSidebarToken::TerminalTitle => "terminal_title".into(),
         AgentSidebarToken::TerminalTitleStripped => "terminal_title_stripped".into(),
+        AgentSidebarToken::GitStatus => "git_status".into(),
         AgentSidebarToken::Custom(name) => format!("${name}"),
         AgentSidebarToken::Styled { token, .. } => agent_token_name(token),
     }
@@ -294,6 +296,7 @@ impl<'de> Deserialize<'de> for AgentSidebarToken {
                 ("agent", Self::Agent),
                 ("terminal_title", Self::TerminalTitle),
                 ("terminal_title_stripped", Self::TerminalTitleStripped),
+                ("git_status", Self::GitStatus),
             ],
         )
         .map_err(serde::de::Error::custom)?;
@@ -369,6 +372,15 @@ where
     Ok(rows_by_agent)
 }
 
+/// Per-agent Git status is opt-in. It runs `git status` in the background
+/// for each agent checkout, so the default keeps that cost off.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct AgentGitStatusConfig {
+    /// Refresh and show Git counts for each agent's checkout. Default: false.
+    pub enabled: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AgentsSidebarConfig {
@@ -377,6 +389,7 @@ pub struct AgentsSidebarConfig {
     #[serde(default, deserialize_with = "deserialize_rows_by_agent")]
     pub rows_by_agent: BTreeMap<String, AgentSidebarRows>,
     pub row_gap: u16,
+    pub git_status: AgentGitStatusConfig,
 }
 
 impl AgentsSidebarConfig {
@@ -400,6 +413,7 @@ impl Default for AgentsSidebarConfig {
             ],
             rows_by_agent: BTreeMap::new(),
             row_gap: DEFAULT_SIDEBAR_ROW_GAP,
+            git_status: AgentGitStatusConfig::default(),
         }
     }
 }
@@ -451,6 +465,7 @@ mod tests {
         );
         assert!(config.agents.rows_by_agent.is_empty());
         assert_eq!(config.agents.row_gap, 0);
+        assert!(!config.agents.git_status.enabled);
         assert_eq!(
             config.spaces.rows,
             vec![
@@ -459,6 +474,23 @@ mod tests {
             ]
         );
         assert_eq!(config.spaces.row_gap, 0);
+    }
+
+    #[test]
+    fn agent_git_status_gate_parses_from_its_own_table() {
+        let config: crate::config::Config = toml::from_str(
+            r#"
+[ui.sidebar.agents.git_status]
+enabled = true
+"#,
+        )
+        .unwrap();
+
+        assert!(config.ui.sidebar.agents.git_status.enabled);
+        assert_eq!(
+            config.ui.sidebar.agents.rows,
+            AgentsSidebarConfig::default().rows
+        );
     }
 
     #[test]
