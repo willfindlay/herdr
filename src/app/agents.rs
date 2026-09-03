@@ -392,6 +392,7 @@ impl App {
             state_change_seq: terminal.last_agent_state_change_seq.unwrap_or(0),
             cwd: pane.cwd,
             foreground_cwd: pane.foreground_cwd,
+            git_status: terminal_git_checkout_status(terminal),
             revision: pane.revision,
         })
     }
@@ -408,6 +409,19 @@ impl App {
             })
             .collect()
     }
+}
+
+fn terminal_git_checkout_status(
+    terminal: &crate::terminal::TerminalState,
+) -> Option<crate::api::schema::GitCheckoutStatus> {
+    if terminal.git_ahead_behind.is_none() && terminal.git_dirty.is_none() {
+        return None;
+    }
+    Some(crate::api::schema::GitCheckoutStatus {
+        ahead: terminal.git_ahead_behind.map(|(ahead, _)| ahead as u64),
+        behind: terminal.git_ahead_behind.map(|(_, behind)| behind as u64),
+        dirty: terminal.git_dirty.map(|dirty| dirty as u64),
+    })
 }
 
 fn available_shell_name(runtime: &crate::terminal::TerminalRuntime) -> Option<String> {

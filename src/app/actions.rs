@@ -1573,6 +1573,27 @@ impl AppState {
         changed
     }
 
+    /// Whether the rows this pane renders carry the git status token, keyed
+    /// on the label the pane reports so the client resolves the same rows.
+    pub(crate) fn terminal_wants_git_status(
+        &self,
+        terminal: &crate::terminal::TerminalState,
+    ) -> bool {
+        rows_want_git_status(&self.sidebar_agents, terminal)
+    }
+
+    /// Clears the checkout facts of every terminal whose rows do not carry
+    /// the token, since no refresh writes to such a terminal.
+    pub(crate) fn clear_git_status_for_unwanted_terminals(&mut self) {
+        let agents = &self.sidebar_agents;
+        for terminal in self.terminals.values_mut() {
+            if !rows_want_git_status(agents, terminal) {
+                terminal.git_ahead_behind = None;
+                terminal.git_dirty = None;
+            }
+        }
+    }
+
     /// Stores per-terminal checkout facts from a finished refresh. It drops a
     /// result whose cwd no longer matches the terminal's current cwd, so a
     /// stale background read cannot overwrite a newer one.
@@ -1583,13 +1604,14 @@ impl AppState {
     ) -> bool {
         let mut changed = false;
         for result in results {
-            let current_cwd = terminal_runtimes
+            let shell_cwd = terminal_runtimes
                 .get(&result.terminal_id)
-                .and_then(|runtime| runtime.foreground_cwd().or_else(|| runtime.cwd()));
+                .and_then(|runtime| runtime.cwd());
             let Some(terminal) = self.terminals.get_mut(&result.terminal_id) else {
                 continue;
             };
-            if current_cwd.unwrap_or_else(|| terminal.cwd.clone()) != result.cwd {
+            let shell_cwd = shell_cwd.unwrap_or_else(|| terminal.cwd.clone());
+            if result.cwd != shell_cwd && terminal.agent_cwd.as_ref() != Some(&result.cwd) {
                 continue;
             }
             if result.demand.ahead_behind && terminal.git_ahead_behind != result.ahead_behind {
@@ -2255,6 +2277,22 @@ impl AppState {
 // Tests
 // ---------------------------------------------------------------------------
 
+fn rows_want_git_status(
+    agents: &crate::config::AgentsSidebarConfig,
+    terminal: &crate::terminal::TerminalState,
+) -> bool {
+    agents.git_status.enabled
+        && agents
+            .rows_for_agent(
+                terminal
+                    .effective_agent_label()
+                    .and_then(crate::detect::parse_agent_label),
+            )
+            .iter()
+            .flatten()
+            .any(|token| matches!(token.parts().0, crate::config::AgentSidebarToken::GitStatus))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2582,6 +2620,40 @@ mod tests {
         let terminal = &state.terminals[&terminal_id];
         assert_eq!(terminal.git_ahead_behind, Some((3, 0)));
         assert_eq!(terminal.git_dirty, Some(2));
+    }
+
+    #[test]
+    fn clear_git_status_for_unwanted_terminals_follows_each_pane_rows() {
+        let mut state = app_with_workspaces(&["claude", "codex"]);
+        state.sidebar_agents.git_status.enabled = true;
+        state.sidebar_agents.rows = vec![vec![crate::config::AgentSidebarToken::Agent]];
+        state.sidebar_agents.rows_by_agent.insert(
+            "claude".into(),
+            vec![vec![crate::config::AgentSidebarToken::GitStatus]],
+        );
+        let mut ids = Vec::new();
+        for (index, agent) in [Agent::Claude, Agent::Codex].into_iter().enumerate() {
+            let ws = &state.workspaces[index];
+            let terminal_id = ws.terminal_id(ws.tabs[0].root_pane).unwrap().clone();
+            let mut terminal = crate::terminal::TerminalState::new(
+                terminal_id.clone(),
+                std::path::PathBuf::from("/repo"),
+            );
+            terminal.detected_agent = Some(agent);
+            terminal.git_ahead_behind = Some((1, 0));
+            terminal.git_dirty = Some(2);
+            state.terminals.insert(terminal_id.clone(), terminal);
+            ids.push(terminal_id);
+        }
+
+        state.clear_git_status_for_unwanted_terminals();
+
+        let claude = &state.terminals[&ids[0]];
+        assert_eq!(claude.git_ahead_behind, Some((1, 0)));
+        assert_eq!(claude.git_dirty, Some(2));
+        let codex = &state.terminals[&ids[1]];
+        assert_eq!(codex.git_ahead_behind, None);
+        assert_eq!(codex.git_dirty, None);
     }
 
     #[test]

@@ -19,7 +19,11 @@ pub(crate) enum ResolvedTokenKind {
     Agent(String),
     TerminalTitle(String),
     Branch(String),
-    GitStatus { ahead: usize, behind: usize },
+    GitStatus {
+        ahead: usize,
+        behind: usize,
+        dirty: usize,
+    },
     Custom(String),
 }
 
@@ -43,6 +47,8 @@ pub(crate) struct AgentTokenContext<'a> {
     pub(crate) terminal_title_stripped: Option<&'a str>,
     pub(crate) canonical_agent: Option<crate::detect::Agent>,
     pub(crate) tokens: &'a std::collections::HashMap<String, String>,
+    pub(crate) ahead_behind: Option<(usize, usize)>,
+    pub(crate) dirty: Option<usize>,
 }
 
 pub(crate) fn agent_rows(
@@ -81,6 +87,18 @@ pub(crate) fn agent_rows(
                         AgentSidebarToken::TerminalTitleStripped => context
                             .terminal_title_stripped
                             .map(|value| ResolvedTokenKind::TerminalTitle(value.to_string())),
+                        AgentSidebarToken::GitStatus if !config.git_status.enabled => None,
+                        AgentSidebarToken::GitStatus => {
+                            let (ahead, behind) = context.ahead_behind.unwrap_or((0, 0));
+                            let dirty = context.dirty.unwrap_or(0);
+                            (ahead > 0 || behind > 0 || dirty > 0).then_some(
+                                ResolvedTokenKind::GitStatus {
+                                    ahead,
+                                    behind,
+                                    dirty,
+                                },
+                            )
+                        }
                         AgentSidebarToken::Custom(name) => context
                             .tokens
                             .get(name)
@@ -132,7 +150,11 @@ pub(crate) fn space_rows(
                         SpaceSidebarToken::GitStatus if !context.suppress_git_details => context
                             .ahead_behind
                             .filter(|(ahead, behind)| *ahead > 0 || *behind > 0)
-                            .map(|(ahead, behind)| ResolvedTokenKind::GitStatus { ahead, behind }),
+                            .map(|(ahead, behind)| ResolvedTokenKind::GitStatus {
+                                ahead,
+                                behind,
+                                dirty: 0,
+                            }),
                         SpaceSidebarToken::GitStatus => None,
                         SpaceSidebarToken::Custom(name) => context
                             .tokens
@@ -198,6 +220,8 @@ mod tests {
             terminal_title_stripped: entry.terminal_title_stripped.as_deref(),
             canonical_agent: entry.canonical_agent,
             tokens: &entry.tokens,
+            ahead_behind: None,
+            dirty: None,
         }
     }
 
@@ -279,6 +303,64 @@ mod tests {
                 ResolvedToken::unstyled(ResolvedTokenKind::Custom("custom title".into())),
             ]]
         );
+    }
+
+    #[test]
+    fn agent_git_status_token_reports_all_counts() {
+        let entry = entry();
+        let mut ctx = context(&entry);
+        ctx.ahead_behind = Some((2, 1));
+        ctx.dirty = Some(3);
+        let mut config = AgentsSidebarConfig {
+            rows: vec![vec![AgentSidebarToken::GitStatus]],
+            ..Default::default()
+        };
+        config.git_status.enabled = true;
+
+        assert_eq!(
+            agent_rows(&config, ctx, "working"),
+            vec![vec![ResolvedToken::unstyled(
+                ResolvedTokenKind::GitStatus {
+                    ahead: 2,
+                    behind: 1,
+                    dirty: 3,
+                }
+            )]]
+        );
+    }
+
+    #[test]
+    fn agent_git_status_token_is_off_until_enabled() {
+        let entry = entry();
+        let mut ctx = context(&entry);
+        ctx.ahead_behind = Some((2, 1));
+        ctx.dirty = Some(3);
+        let config = AgentsSidebarConfig {
+            rows: vec![vec![AgentSidebarToken::GitStatus]],
+            ..Default::default()
+        };
+
+        assert_eq!(agent_rows(&config, ctx, "working"), Vec::<Vec<_>>::new());
+    }
+
+    #[test]
+    fn agent_git_status_token_hides_when_clean() {
+        let entry = entry();
+        let mut config = AgentsSidebarConfig {
+            rows: vec![vec![AgentSidebarToken::GitStatus]],
+            ..Default::default()
+        };
+        config.git_status.enabled = true;
+
+        let mut ctx = context(&entry);
+        ctx.ahead_behind = Some((0, 0));
+        ctx.dirty = Some(0);
+        assert_eq!(agent_rows(&config, ctx, "working"), Vec::<Vec<_>>::new());
+
+        let mut ctx = context(&entry);
+        ctx.ahead_behind = None;
+        ctx.dirty = None;
+        assert_eq!(agent_rows(&config, ctx, "working"), Vec::<Vec<_>>::new());
     }
 
     #[test]

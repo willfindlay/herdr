@@ -249,6 +249,8 @@ fn agent_rows(snapshot: &ClientShellSnapshot, config: &ClientShellConfig) -> Vec
                     terminal_title_stripped: agent.terminal_title_stripped.as_deref(),
                     canonical_agent,
                     tokens: &tokens,
+                    ahead_behind: agent.git_ahead_behind,
+                    dirty: agent.git_dirty,
                 },
                 state_text,
             );
