@@ -315,9 +315,6 @@ fn capture_tab(
 ) -> TabSnapshot {
     let mut panes = HashMap::new();
     for id in tab.panes.keys() {
-        let cwd = tab
-            .cwd_for_pane(*id, terminals, terminal_runtimes)
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| "/".into()));
         let terminal = tab
             .panes
             .get(id)
@@ -356,6 +353,14 @@ fn capture_tab(
                     value: session.session_ref.value.clone(),
                 })
         });
+        // A resumed agent spawns in the saved cwd, so a pane that carries an
+        // agent session saves the agent's recorded cwd. Without a recorded
+        // agent cwd the pane saves its shell cwd like any other.
+        let cwd = agent_session
+            .as_ref()
+            .and_then(|_| terminal.and_then(|terminal| terminal.agent_cwd.clone()))
+            .or_else(|| tab.cwd_for_pane(*id, terminals, terminal_runtimes))
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| "/".into()));
         panes.insert(
             id.raw(),
             PaneSnapshot {
