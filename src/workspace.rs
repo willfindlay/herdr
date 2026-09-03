@@ -47,7 +47,18 @@ pub struct WorkspaceGitStatus {
     pub auto_label: String,
     pub branch: Option<String>,
     pub ahead_behind: Option<(usize, usize)>,
+    pub dirty: Option<usize>,
     pub space: Option<GitSpaceMetadata>,
+}
+
+/// Git facts for the checkout a terminal's foreground process runs in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TerminalGitStatus {
+    pub terminal_id: TerminalId,
+    pub cwd: PathBuf,
+    pub demand: GitStatusRefreshDemand,
+    pub ahead_behind: Option<(usize, usize)>,
+    pub dirty: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +66,8 @@ pub struct WorkspaceGitStatusSnapshot {
     pub auto_label: String,
     pub branch: Option<String>,
     pub ahead_behind: Option<(usize, usize)>,
+    /// Number of entries `git status` lists for the checkout.
+    pub dirty: Option<usize>,
     pub space: Option<GitSpaceMetadata>,
 }
 
@@ -96,6 +109,7 @@ impl WorkspaceGitStatusSnapshot {
             auto_label,
             branch: self.branch,
             ahead_behind: self.ahead_behind,
+            dirty: self.dirty,
             space: self.space,
         }
     }

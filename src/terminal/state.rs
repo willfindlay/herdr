@@ -152,6 +152,10 @@ pub struct TerminalState {
     recent_agent_process_exit: Option<RecentAgentProcessExit>,
     agent_process_acquisition_pending: bool,
     pub pending_agent_resume_plan: Option<crate::agent_resume::AgentResumePlan>,
+    /// Ahead/behind counts for the checkout this terminal reports on.
+    pub git_ahead_behind: Option<(usize, usize)>,
+    /// Number of `git status` entries for that checkout.
+    pub git_dirty: Option<usize>,
 }
 
 impl TerminalState {
@@ -187,6 +191,8 @@ impl TerminalState {
             recent_agent_process_exit: None,
             agent_process_acquisition_pending: false,
             pending_agent_resume_plan: None,
+            git_ahead_behind: None,
+            git_dirty: None,
         }
     }
 
@@ -2073,6 +2079,8 @@ impl TerminalState {
         self.recent_agent_process_exit = None;
         self.agent_process_acquisition_pending = false;
         self.pending_agent_resume_plan = None;
+        self.git_ahead_behind = None;
+        self.git_dirty = None;
         self.clear_agent_name();
     }
 
@@ -5682,6 +5690,8 @@ mod tests {
         terminal.set_detected_state(Some(Agent::Codex), AgentState::Idle);
         terminal.set_detected_agent_process_at(Agent::Codex, Instant::now());
         terminal.agent_cwd = Some(PathBuf::from("/repo/worktree"));
+        terminal.git_ahead_behind = Some((1, 0));
+        terminal.git_dirty = Some(2);
 
         terminal.clear_agent_runtime_identity_after_respawn();
 
@@ -5692,6 +5702,8 @@ mod tests {
         assert!(terminal.agent_cwd.is_none());
         assert!(!terminal.respawn_shell_on_exit);
         assert!(!terminal.finish_agent_process_acquisition());
+        assert!(terminal.git_ahead_behind.is_none());
+        assert!(terminal.git_dirty.is_none());
     }
 
     #[test]

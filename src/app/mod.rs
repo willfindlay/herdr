@@ -1037,6 +1037,7 @@ mod tests {
 
         let changed = app.handle_internal_event_with_render_impact(AppEvent::GitStatusRefreshed {
             results: Vec::new(),
+            terminal_results: Vec::new(),
             cache_updates: Vec::new(),
         });
 
@@ -1084,6 +1085,7 @@ mod tests {
 
         app.handle_internal_event(AppEvent::GitStatusRefreshed {
             results: Vec::new(),
+            terminal_results: Vec::new(),
             cache_updates: Vec::new(),
         });
 
@@ -1100,6 +1102,7 @@ mod tests {
         let resolved_identity_cwd = app.state.workspaces[0].resolved_identity_cwd().unwrap();
 
         app.handle_internal_event(AppEvent::GitStatusRefreshed {
+            terminal_results: Vec::new(),
             results: vec![crate::workspace::WorkspaceGitStatus {
                 workspace_id,
                 resolved_identity_cwd: resolved_identity_cwd.clone(),
@@ -1108,6 +1111,7 @@ mod tests {
                 auto_label: "one".into(),
                 branch: Some("render-dirty-test".into()),
                 ahead_behind: Some((1, 0)),
+                dirty: None,
                 space: None,
             }],
             cache_updates: Vec::new(),
@@ -1257,6 +1261,7 @@ mod tests {
         app.event_tx
             .try_send(AppEvent::GitStatusRefreshed {
                 results: Vec::new(),
+                terminal_results: Vec::new(),
                 cache_updates: Vec::new(),
             })
             .unwrap();

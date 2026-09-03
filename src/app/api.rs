@@ -32,8 +32,9 @@ impl App {
         match ev {
             AppEvent::GitStatusRefreshed {
                 results,
+                terminal_results,
                 cache_updates,
-            } => self.handle_git_status_refreshed(results, cache_updates),
+            } => self.handle_git_status_refreshed(results, terminal_results, cache_updates),
             AppEvent::TabBarCommandFinished {
                 generation,
                 segment_index,
@@ -53,6 +54,7 @@ impl App {
     fn handle_git_status_refreshed(
         &mut self,
         results: Vec<crate::workspace::WorkspaceGitStatus>,
+        terminal_results: Vec<crate::workspace::TerminalGitStatus>,
         cache_updates: Vec<(std::path::PathBuf, crate::workspace::GitStatusCacheEntry)>,
     ) -> bool {
         self.git_refresh_in_flight = false;
@@ -67,7 +69,10 @@ impl App {
         }
         let changed = self
             .state
-            .apply_workspace_git_statuses(&self.terminal_runtimes, results);
+            .apply_workspace_git_statuses(&self.terminal_runtimes, results)
+            | self
+                .state
+                .apply_terminal_git_statuses(&self.terminal_runtimes, terminal_results);
         if changed {
             self.render_dirty.request_generic();
             self.render_notify.notify_one();
@@ -92,10 +97,11 @@ impl App {
 
         if let AppEvent::GitStatusRefreshed {
             results,
+            terminal_results,
             cache_updates,
         } = ev
         {
-            self.handle_git_status_refreshed(results, cache_updates);
+            self.handle_git_status_refreshed(results, terminal_results, cache_updates);
             return Vec::new();
         }
 

@@ -69,6 +69,7 @@ impl App {
                 refresh_workspace_git_statuses_with_cache_and_demand(workspaces, &cache, demand);
             let _ = event_tx.blocking_send(AppEvent::GitStatusRefreshed {
                 results: output.results,
+                terminal_results: Vec::new(),
                 cache_updates: output.cache_updates,
             });
         });
@@ -262,6 +263,7 @@ mod tests {
                 auto_label: "/".into(),
                 branch: Some("main".into()),
                 ahead_behind: None,
+                dirty: None,
                 space: Some(crate::workspace::GitSpaceMetadata {
                     key: "/.git".into(),
                     checkout_key: "/".into(),
@@ -270,6 +272,7 @@ mod tests {
                     is_linked_worktree: false,
                 }),
             },
+            dirty_refreshed_at: None,
         };
         let items = ["alpha", "beta"]
             .into_iter()
@@ -351,8 +354,10 @@ mod tests {
                 auto_label: "stale".into(),
                 branch: None,
                 ahead_behind: None,
+                dirty: None,
                 space: None,
             },
+            dirty_refreshed_at: None,
         };
         let jobs = deduplicate_git_refresh_items(items, &HashMap::from([(cache_key, cached)]));
         assert_eq!(jobs.len(), 1);
@@ -402,6 +407,7 @@ mod tests {
                 GitStatusRefreshDemand {
                     branch: true,
                     ahead_behind: false,
+                    dirty: false,
                 },
             ),
             (
@@ -409,6 +415,7 @@ mod tests {
                 GitStatusRefreshDemand {
                     branch: false,
                     ahead_behind: true,
+                    dirty: false,
                 },
             ),
         ];
@@ -512,6 +519,7 @@ mod tests {
 
         app.handle_internal_event(AppEvent::GitStatusRefreshed {
             results: Vec::new(),
+            terminal_results: Vec::new(),
             cache_updates: Vec::new(),
         });
 

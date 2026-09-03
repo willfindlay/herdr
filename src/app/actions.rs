@@ -1573,6 +1573,37 @@ impl AppState {
         changed
     }
 
+    /// Stores per-terminal checkout facts from a finished refresh. It drops a
+    /// result whose cwd no longer matches the terminal's current cwd, so a
+    /// stale background read cannot overwrite a newer one.
+    pub fn apply_terminal_git_statuses(
+        &mut self,
+        terminal_runtimes: &crate::terminal::TerminalRuntimeRegistry,
+        results: Vec<crate::workspace::TerminalGitStatus>,
+    ) -> bool {
+        let mut changed = false;
+        for result in results {
+            let current_cwd = terminal_runtimes
+                .get(&result.terminal_id)
+                .and_then(|runtime| runtime.foreground_cwd().or_else(|| runtime.cwd()));
+            let Some(terminal) = self.terminals.get_mut(&result.terminal_id) else {
+                continue;
+            };
+            if current_cwd.unwrap_or_else(|| terminal.cwd.clone()) != result.cwd {
+                continue;
+            }
+            if result.demand.ahead_behind && terminal.git_ahead_behind != result.ahead_behind {
+                terminal.git_ahead_behind = result.ahead_behind;
+                changed = true;
+            }
+            if result.demand.dirty && terminal.git_dirty != result.dirty {
+                terminal.git_dirty = result.dirty;
+                changed = true;
+            }
+        }
+        changed
+    }
+
     pub fn handle_app_event(&mut self, event: AppEvent) -> Vec<PaneStateUpdate> {
         match event {
             AppEvent::PaneDied { pane_id } => {
@@ -1797,9 +1828,11 @@ impl AppState {
             }
             AppEvent::GitStatusRefreshed {
                 results,
+                terminal_results,
                 cache_updates,
             } => {
                 let _ = results;
+                let _ = terminal_results;
                 let _ = cache_updates;
                 Vec::new()
             }
@@ -2487,6 +2520,7 @@ mod tests {
                 auto_label: "one".into(),
                 branch: Some("main".into()),
                 ahead_behind: Some((2, 1)),
+                dirty: None,
                 space: None,
             }],
         );
@@ -2496,6 +2530,58 @@ mod tests {
         assert_eq!(state.workspaces[0].git_ahead_behind(), Some((2, 1)));
         assert_eq!(state.workspaces[1].id, second_id);
         assert_eq!(state.workspaces[1].git_ahead_behind(), None);
+    }
+
+    #[test]
+    fn apply_terminal_git_statuses_stores_matching_cwd_and_skips_stale() {
+        let mut state = app_with_workspaces(&["one"]);
+        let ws = &state.workspaces[0];
+        let terminal_id = ws.terminal_id(ws.tabs[0].root_pane).unwrap().clone();
+        state.terminals.insert(
+            terminal_id.clone(),
+            crate::terminal::TerminalState::new(
+                terminal_id.clone(),
+                std::path::PathBuf::from("/repo/worktree"),
+            ),
+        );
+        let terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
+        let demand = crate::workspace::GitStatusRefreshDemand {
+            branch: false,
+            ahead_behind: true,
+            dirty: true,
+        };
+
+        let changed = state.apply_terminal_git_statuses(
+            &terminal_runtimes,
+            vec![crate::workspace::TerminalGitStatus {
+                terminal_id: terminal_id.clone(),
+                cwd: std::path::PathBuf::from("/repo/worktree"),
+                demand,
+                ahead_behind: Some((3, 0)),
+                dirty: Some(2),
+            }],
+        );
+
+        assert!(changed);
+        let terminal = &state.terminals[&terminal_id];
+        assert_eq!(terminal.git_ahead_behind, Some((3, 0)));
+        assert_eq!(terminal.git_dirty, Some(2));
+
+        let changed = state.apply_terminal_git_statuses(
+            &terminal_runtimes,
+            vec![crate::workspace::TerminalGitStatus {
+                terminal_id: terminal_id.clone(),
+                cwd: std::path::PathBuf::from("/somewhere/else"),
+                demand,
+                ahead_behind: None,
+                dirty: Some(9),
+            }],
+        );
+
+        assert!(!changed);
+        let terminal = &state.terminals[&terminal_id];
+        assert_eq!(terminal.git_ahead_behind, Some((3, 0)));
+        assert_eq!(terminal.git_dirty, Some(2));
     }
 
     #[test]
@@ -2516,6 +2602,7 @@ mod tests {
                 auto_label: "stale".into(),
                 branch: Some("main".into()),
                 ahead_behind: Some((0, 1)),
+                dirty: None,
                 space: None,
             }],
         );
@@ -2543,10 +2630,12 @@ mod tests {
                 demand: crate::workspace::GitStatusRefreshDemand {
                     branch: false,
                     ahead_behind: true,
+                    dirty: false,
                 },
                 auto_label: "one".into(),
                 branch: Some("new".into()),
                 ahead_behind: None,
+                dirty: None,
                 space: None,
             }],
         );
@@ -2574,6 +2663,7 @@ mod tests {
                 auto_label: "one".into(),
                 branch: None,
                 ahead_behind: None,
+                dirty: None,
                 space: None,
             }],
         );
@@ -2602,6 +2692,7 @@ mod tests {
                 auto_label: "other".into(),
                 branch: Some("scratch".into()),
                 ahead_behind: None,
+                dirty: None,
                 space: Some(crate::workspace::GitSpaceMetadata {
                     key: "other-repo-key".into(),
                     checkout_key: "/other/checkout".into(),
