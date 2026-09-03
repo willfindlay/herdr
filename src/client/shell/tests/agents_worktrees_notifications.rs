@@ -580,6 +580,219 @@ fn agent_sidebar_honors_priority_symbols_tokens_and_stable_hits() {
 }
 
 #[test]
+fn agent_git_status_renders_flush_right_in_default_rows() {
+    let mut projected = snapshot();
+    let mut second_pane = projected.panes[0].clone();
+    second_pane.pane_id = "pane_2".into();
+    second_pane.focused = false;
+    projected.panes.push(second_pane);
+    projected.agents = vec![
+        ClientShellAgent {
+            pane_id: "pane_1".into(),
+            workspace_id: "ws_1".into(),
+            tab_id: "tab_1".into(),
+            name: Some("agent one".into()),
+            display_agent: None,
+            agent: None,
+            title: None,
+            terminal_title: None,
+            terminal_title_stripped: None,
+            agent_status: AgentStatus::Working,
+            state_change_seq: 1,
+            state_labels: Vec::new(),
+            tokens: Vec::new(),
+            focused: false,
+            git_ahead_behind: Some((1, 0)),
+            git_dirty: Some(2),
+        },
+        ClientShellAgent {
+            pane_id: "pane_2".into(),
+            workspace_id: "ws_1".into(),
+            tab_id: "tab_1".into(),
+            name: Some("agent two".into()),
+            display_agent: None,
+            agent: None,
+            title: None,
+            terminal_title: None,
+            terminal_title_stripped: None,
+            agent_status: AgentStatus::Idle,
+            state_change_seq: 2,
+            state_labels: Vec::new(),
+            tokens: Vec::new(),
+            focused: false,
+            git_ahead_behind: None,
+            git_dirty: None,
+        },
+    ];
+
+    let mut config = Config::default();
+    config.ui.sidebar.agents.git_status.enabled = true;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("agent sidebar frame");
+
+    let agent_rect = |pane_id: &str| {
+        state
+            .hits
+            .agents
+            .iter()
+            .find(|(_, id)| id == pane_id)
+            .map(|(rect, _)| *rect)
+            .expect("agent row hit")
+    };
+    let cell_at = |x: u16, y: u16| &frame.cells[y as usize * frame.width as usize + x as usize];
+    let line_text = |rect: Rect, line: u16| {
+        (rect.x..rect.right())
+            .map(|x| cell_at(x, rect.y + line).symbol.clone())
+            .collect::<String>()
+    };
+
+    let one = agent_rect("pane_1");
+    let one_second_line = line_text(one, 1);
+    assert!(
+        one_second_line.trim_start().starts_with("agent one"),
+        "line: {one_second_line:?}"
+    );
+    assert!(
+        one_second_line.trim_end().ends_with("↑1 ~2"),
+        "line: {one_second_line:?}"
+    );
+    let last = cell_at(one.right() - 1, one.y + 1);
+    assert_ne!(last.symbol, " ");
+
+    let up_x = one.right() - 5;
+    let tilde_x = one.right() - 2;
+    assert_eq!(cell_at(up_x, one.y + 1).symbol, "↑");
+    assert_eq!(
+        cell_at(up_x, one.y + 1).fg,
+        crate::protocol::color_to_u32(state.config.palette.green)
+    );
+    assert_eq!(cell_at(tilde_x, one.y + 1).symbol, "~");
+    assert_eq!(
+        cell_at(tilde_x, one.y + 1).fg,
+        crate::protocol::color_to_u32(state.config.palette.yellow)
+    );
+
+    let two = agent_rect("pane_2");
+    let two_text = (0..two.height)
+        .map(|line| line_text(two, line))
+        .collect::<String>();
+    assert!(!two_text.contains('↑'), "text: {two_text:?}");
+    assert!(!two_text.contains('↓'), "text: {two_text:?}");
+    assert!(!two_text.contains('~'), "text: {two_text:?}");
+}
+
+#[test]
+fn agent_git_status_is_skipped_when_it_does_not_fit() {
+    let mut projected = snapshot();
+    projected.agents = vec![ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: Some("agent one".into()),
+        display_agent: None,
+        agent: None,
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Working,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: false,
+        git_ahead_behind: Some((123_456, 654_321)),
+        git_dirty: Some(999_999),
+    }];
+
+    let mut config = Config::default();
+    config.ui.sidebar.agents.git_status.enabled = true;
+    config.ui.sidebar_width = 18;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("agent sidebar frame");
+
+    let one = state
+        .hits
+        .agents
+        .iter()
+        .find(|(_, id)| id == "pane_1")
+        .map(|(rect, _)| *rect)
+        .expect("agent row hit");
+    let cell_at = |x: u16, y: u16| &frame.cells[y as usize * frame.width as usize + x as usize];
+    let line_text = |line: u16| {
+        (one.x..one.right())
+            .map(|x| cell_at(x, one.y + line).symbol.clone())
+            .collect::<String>()
+    };
+
+    let second_line = line_text(1);
+    assert!(
+        second_line.trim_start().starts_with("agent one"),
+        "line: {second_line:?}"
+    );
+    let text = (0..one.height).map(line_text).collect::<String>();
+    assert!(!text.contains('↑'), "text: {text:?}");
+    assert!(!text.contains('↓'), "text: {text:?}");
+    assert!(!text.contains('~'), "text: {text:?}");
+}
+
+#[test]
+fn agent_git_status_keeps_the_name_when_the_fit_is_exact() {
+    let mut projected = snapshot();
+    projected.agents = vec![ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: Some("agent one".into()),
+        display_agent: None,
+        agent: None,
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Working,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: false,
+        git_ahead_behind: Some((100, 100)),
+        git_dirty: Some(10),
+    }];
+
+    let mut config = Config::default();
+    config.ui.sidebar.agents.git_status.enabled = true;
+    config.ui.sidebar_width = 18;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("agent sidebar frame");
+
+    let one = state
+        .hits
+        .agents
+        .iter()
+        .find(|(_, id)| id == "pane_1")
+        .map(|(rect, _)| *rect)
+        .expect("agent row hit");
+    let cell_at = |x: u16, y: u16| &frame.cells[y as usize * frame.width as usize + x as usize];
+    let line_text = |line: u16| {
+        (one.x..one.right())
+            .map(|x| cell_at(x, one.y + line).symbol.clone())
+            .collect::<String>()
+    };
+
+    // Three columns of indent leave `↑100 ↓100 ~10` (13 wide) exactly one gap
+    // short of the row, which is the width that used to blank the name.
+    let second_line = line_text(1);
+    assert!(
+        second_line.trim_start().starts_with('a'),
+        "line: {second_line:?}"
+    );
+    assert!(!second_line.contains('↑'), "line: {second_line:?}");
+}
+
+#[test]
 fn active_agent_view_controls_sidebar_order_and_focus_indices() {
     let mut projected = snapshot();
     let mut second_pane = projected.panes[0].clone();

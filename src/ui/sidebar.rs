@@ -117,10 +117,17 @@ pub(crate) fn resolved_token_spans(
         .iter()
         .map(|token| match &token.kind {
             ResolvedTokenKind::StateIcon => display_width(state_icon.0),
-            ResolvedTokenKind::GitStatus { ahead, behind, .. } => {
-                usize::from(*ahead > 0) * display_width(&format!("↑{ahead}"))
-                    + usize::from(*behind > 0) * display_width(&format!("↓{behind}"))
-                    + usize::from(*ahead > 0 && *behind > 0)
+            ResolvedTokenKind::GitStatus {
+                ahead,
+                behind,
+                dirty,
+            } => {
+                let shown = git_status_parts(*ahead, *behind, *dirty)
+                    .into_iter()
+                    .filter(|(visible, _)| *visible)
+                    .map(|(_, text)| display_width(&text))
+                    .collect::<Vec<_>>();
+                shown.iter().sum::<usize>() + shown.len().saturating_sub(1)
             }
             _ => 0,
         })
@@ -243,24 +250,31 @@ pub(crate) fn resolved_token_spans(
                 truncate_end(text, budgets[index]),
                 apply_token_style(secondary_style, token.style),
             )),
-            ResolvedTokenKind::GitStatus { ahead, behind, .. } => {
-                if *ahead > 0 {
+            ResolvedTokenKind::GitStatus {
+                ahead,
+                behind,
+                dirty,
+            } => {
+                let colors = [palette.green, palette.red, palette.yellow];
+                let mut wrote = false;
+                for ((visible, text), color) in git_status_parts(*ahead, *behind, *dirty)
+                    .into_iter()
+                    .zip(colors)
+                {
+                    if !visible {
+                        continue;
+                    }
+                    if wrote {
+                        spans.push(Span::styled(
+                            " ",
+                            apply_token_style(Style::default(), token.style),
+                        ));
+                    }
                     spans.push(Span::styled(
-                        format!("↑{ahead}"),
-                        apply_token_style(Style::default().fg(palette.green), token.style),
+                        text,
+                        apply_token_style(Style::default().fg(color), token.style),
                     ));
-                }
-                if *ahead > 0 && *behind > 0 {
-                    spans.push(Span::styled(
-                        " ",
-                        apply_token_style(Style::default(), token.style),
-                    ));
-                }
-                if *behind > 0 {
-                    spans.push(Span::styled(
-                        format!("↓{behind}"),
-                        apply_token_style(Style::default().fg(palette.red), token.style),
-                    ));
+                    wrote = true;
                 }
             }
             ResolvedTokenKind::TerminalTitle(text) | ResolvedTokenKind::Custom(text) => {
@@ -293,4 +307,104 @@ fn apply_token_style(mut style: Style, patch: crate::config::SidebarTokenStyle) 
         };
     }
     style
+}
+
+/// The git status parts in draw order, each with whether it shows. The width
+/// pass and the span pass both read this so they cannot disagree.
+fn git_status_parts(ahead: usize, behind: usize, dirty: usize) -> [(bool, String); 3] {
+    [
+        (ahead > 0, format!("↑{ahead}")),
+        (behind > 0, format!("↓{behind}")),
+        (dirty > 0, format!("~{dirty}")),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::state::Palette;
+
+    fn git_status_spans(
+        kind: ResolvedTokenKind,
+        style: crate::config::SidebarTokenStyle,
+    ) -> Vec<Span<'static>> {
+        let palette = Palette::catppuccin();
+        resolved_token_spans(
+            &[ResolvedToken { kind, style }],
+            ("●", Style::default()),
+            Style::default(),
+            Style::default(),
+            Style::default(),
+            Style::default(),
+            &palette,
+            80,
+        )
+    }
+
+    #[test]
+    fn git_status_spans_color_each_part() {
+        let palette = Palette::catppuccin();
+        let spans = git_status_spans(
+            ResolvedTokenKind::GitStatus {
+                ahead: 1,
+                behind: 2,
+                dirty: 3,
+            },
+            crate::config::SidebarTokenStyle::default(),
+        );
+
+        assert_eq!(spans.len(), 5);
+        assert_eq!(spans[0].content.as_ref(), "↑1");
+        assert_eq!(spans[0].style.fg, Some(palette.green));
+        assert_eq!(spans[1].content.as_ref(), " ");
+        assert_eq!(spans[2].content.as_ref(), "↓2");
+        assert_eq!(spans[2].style.fg, Some(palette.red));
+        assert_eq!(spans[3].content.as_ref(), " ");
+        assert_eq!(spans[4].content.as_ref(), "~3");
+        assert_eq!(spans[4].style.fg, Some(palette.yellow));
+    }
+
+    #[test]
+    fn git_status_spans_hide_zero_parts() {
+        let spans = git_status_spans(
+            ResolvedTokenKind::GitStatus {
+                ahead: 0,
+                behind: 2,
+                dirty: 0,
+            },
+            crate::config::SidebarTokenStyle::default(),
+        );
+
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].content.as_ref(), "↓2");
+    }
+
+    #[test]
+    fn git_status_style_override_applies_to_every_part() {
+        // SidebarTokenColor has no public constructor outside the config
+        // module, so build the override through the same TOML parsing
+        // path a user's config file would take.
+        let config: crate::config::Config = toml::from_str(
+            r##"
+[ui.sidebar.agents]
+rows = [[{ token = "git_status", fg = "#ff00aa" }]]
+"##,
+        )
+        .expect("valid sidebar config");
+        let (_, style) = config.ui.sidebar.agents.rows[0][0].parts();
+        let expected_fg = style.fg.expect("fg override present").ratatui();
+
+        let spans = git_status_spans(
+            ResolvedTokenKind::GitStatus {
+                ahead: 1,
+                behind: 2,
+                dirty: 3,
+            },
+            style,
+        );
+
+        assert_eq!(spans[0].style.fg, Some(expected_fg));
+        assert_eq!(spans[2].style.fg, Some(expected_fg));
+        assert_eq!(spans[4].style.fg, Some(expected_fg));
+    }
 }

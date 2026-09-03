@@ -353,7 +353,7 @@ The expanded desktop sidebar renders each inner array in `rows` as one line. The
 row_gap = 0
 rows = [
   ["state_icon", "workspace", "tab"],
-  ["agent"],
+  ["agent", "git_status"],
 ]
 
 [ui.sidebar.spaces]
@@ -374,6 +374,7 @@ Agent rows accept these built-in tokens:
 - `agent` — detected or reported agent display name.
 - `terminal_title` — latest OSC 0/2 terminal title after safety normalization.
 - `terminal_title_stripped` — the terminal title with one recognized leading activity or spinner glyph and its following whitespace removed.
+- `git_status`: Git ahead, behind, and dirty counts (the entries `git status` lists) for the agent's checkout, nonzero parts only, drawn at the right edge of its row once `ui.sidebar.agents.git_status.enabled` is set.
 - `$name` — custom pane metadata named `name`.
 
 Space rows accept these built-in tokens:
@@ -385,7 +386,14 @@ Space rows accept these built-in tokens:
 - `git_status` — Git ahead and behind counts when nonzero.
 - `$name` — custom workspace metadata named `name`.
 
-Tokens render in their configured order. Herdr normally separates adjacent values with ` · ` and uses a single space after `state_icon`. Missing values and their separators disappear; a row disappears when none of its tokens have a value. Each layout may contain at most 16 rows, with at most 16 tokens in each row.
+The `git_status` agent token is off by default because it runs `git status` in the background for every agent checkout. Turn it on with:
+
+```toml
+[ui.sidebar.agents.git_status]
+enabled = true
+```
+
+Tokens render in their configured order, except `git_status` on an agent row, which sits at the right edge when it fits and is skipped otherwise. Herdr normally separates adjacent values with ` · ` and uses a single space after `state_icon`. Missing values and their separators disappear; a row disappears when none of its tokens have a value. Each layout may contain at most 16 rows, with at most 16 tokens in each row.
 
 A token entry can also be an inline style table:
 
@@ -397,7 +405,7 @@ rows = [
 ]
 ```
 
-`fg` accepts strict `#RGB` or `#RRGGBB`. `bold` and `dim` accept booleans. Omitted fields preserve the token's contextual style; explicit `false` removes that modifier. Styling applies to one occurrence, so the same token may look different in another row or agent override. A foreground override replaces all semantic foregrounds inside that occurrence: for example, styled `git_status` ahead and behind counts use one color instead of their default green and red. Token styles never change separators or row backgrounds.
+`fg` accepts strict `#RGB` or `#RRGGBB`. `bold` and `dim` accept booleans. Omitted fields preserve the token's contextual style; explicit `false` removes that modifier. Styling applies to one occurrence, so the same token may look different in another row or agent override. A foreground override replaces all semantic foregrounds inside that occurrence: for example, styled `git_status` ahead, behind, and dirty counts use one color instead of their default green, red, and yellow. Token styles never change separators or row backgrounds.
 
 `row_gap` controls the blank terminal rows between entries, independently for the Agent and Space panels. It defaults to `0`, which packs entries together; set it to `1` to restore the previous spacing. It does not add spacing between the content lines declared in `rows`. Consecutive indented worktree children remain packed as one Space group.
 
