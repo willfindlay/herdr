@@ -2585,6 +2585,7 @@ fn unchanged_git_refresh_does_not_request_headless_render() {
     server.app.state.workspaces.push(workspace);
 
     let changed = server.handle_internal_event_with_forwarding(AppEvent::GitStatusRefreshed {
+        terminal_results: Vec::new(),
         results: vec![crate::workspace::WorkspaceGitStatus {
             workspace_id,
             resolved_identity_cwd: cwd.clone(),
@@ -2593,6 +2594,7 @@ fn unchanged_git_refresh_does_not_request_headless_render() {
             auto_label: "cached".into(),
             branch: None,
             ahead_behind: None,
+            dirty: None,
             space: None,
         }],
         cache_updates: Vec::new(),
@@ -2611,6 +2613,7 @@ fn changed_git_refresh_requests_headless_render() {
     server.app.state.workspaces.push(workspace);
 
     let changed = server.handle_internal_event_with_forwarding(AppEvent::GitStatusRefreshed {
+        terminal_results: Vec::new(),
         results: vec![crate::workspace::WorkspaceGitStatus {
             workspace_id,
             resolved_identity_cwd: cwd.clone(),
@@ -2619,6 +2622,7 @@ fn changed_git_refresh_requests_headless_render() {
             auto_label: "one".into(),
             branch: Some("changed".into()),
             ahead_behind: None,
+            dirty: None,
             space: None,
         }],
         cache_updates: Vec::new(),
