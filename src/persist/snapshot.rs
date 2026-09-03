@@ -1022,6 +1022,56 @@ mod tests {
         assert_eq!(tab.panes[&second.raw()].cwd, PathBuf::from("/tmp/herdr"));
     }
 
+    fn agent_session() -> crate::agent_resume::PersistedAgentSession {
+        crate::agent_resume::PersistedAgentSession {
+            source: "hook".to_string(),
+            agent: "claude".to_string(),
+            session_ref: crate::agent_resume::AgentSessionRef::id("claude-session").unwrap(),
+        }
+    }
+
+    fn single_terminal_state(
+        cwd: &str,
+        agent_cwd: Option<&str>,
+        session: Option<crate::agent_resume::PersistedAgentSession>,
+    ) -> AppState {
+        let mut state = state_with_workspaces(&["one"]);
+        let root = state.workspaces[0].tabs[0].root_pane;
+        let terminal_id = state.workspaces[0].tabs[0].panes[&root]
+            .attached_terminal_id
+            .clone();
+        let terminal = state.terminals.get_mut(&terminal_id).unwrap();
+        terminal.cwd = PathBuf::from(cwd);
+        terminal.agent_cwd = agent_cwd.map(PathBuf::from);
+        terminal.persisted_agent_session = session;
+        state
+    }
+
+    fn captured_root_cwd(state: &AppState) -> PathBuf {
+        let root = state.workspaces[0].tabs[0].root_pane;
+        capture_from_state(state).workspaces[0].tabs[0].panes[&root.raw()]
+            .cwd
+            .clone()
+    }
+
+    #[test]
+    fn capture_persists_agent_pane_at_its_agent_cwd() {
+        let state = single_terminal_state("/repo", Some("/repo/worktree"), Some(agent_session()));
+        assert_eq!(captured_root_cwd(&state), PathBuf::from("/repo/worktree"));
+    }
+
+    #[test]
+    fn capture_keeps_shell_cwd_for_pane_without_agent_session() {
+        let state = single_terminal_state("/repo", Some("/repo/worktree"), None);
+        assert_eq!(captured_root_cwd(&state), PathBuf::from("/repo"));
+    }
+
+    #[test]
+    fn capture_falls_back_to_shell_cwd_when_agent_cwd_unknown() {
+        let state = single_terminal_state("/repo", None, Some(agent_session()));
+        assert_eq!(captured_root_cwd(&state), PathBuf::from("/repo"));
+    }
+
     #[tokio::test]
     async fn capture_contract_tracks_pane_history_from_runtime() {
         let state = state_with_workspaces(&["one"]);

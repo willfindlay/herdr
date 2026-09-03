@@ -2929,6 +2929,32 @@ mod tests {
     }
 
     #[test]
+    fn next_loop_deadline_includes_agent_cwd_poll_only_with_agent_terminal() {
+        let mut app = test_app();
+        let now = Instant::now();
+        app.next_agent_cwd_poll = now + Duration::from_secs(1);
+        app.session_save_deadline = Some(now + Duration::from_secs(2));
+        app.next_auto_update_check = Some(now + Duration::from_secs(6));
+        app.state
+            .workspaces
+            .push(crate::workspace::Workspace::test_new("one"));
+        app.state.ensure_test_terminals();
+
+        assert_eq!(
+            app.next_headless_loop_deadline_with_git_refresh(now, false, false),
+            app.session_save_deadline
+        );
+
+        let terminal = app.state.terminals.values_mut().next().unwrap();
+        terminal.detected_agent = Some(crate::detect::Agent::Claude);
+
+        assert_eq!(
+            app.next_headless_loop_deadline_with_git_refresh(now, false, false),
+            Some(app.next_agent_cwd_poll)
+        );
+    }
+
+    #[test]
     fn headless_next_loop_deadline_ignores_resize_poll() {
         let mut app = test_app();
         let now = Instant::now();
