@@ -5608,6 +5608,7 @@ mod tests {
             session_ref: session_ref.clone(),
         });
         terminal.set_detected_state(Some(Agent::Pi), AgentState::Working);
+        terminal.agent_cwd = Some(PathBuf::from("/repo/worktree"));
 
         let mutation = terminal.set_detected_state_with_screen_signals_at(
             Some(Agent::Pi),
@@ -5621,6 +5622,7 @@ mod tests {
 
         assert!(mutation.session_ref_changed);
         assert!(terminal.persisted_agent_session.is_none());
+        assert!(terminal.agent_cwd.is_none());
 
         let delayed = terminal.set_agent_session_ref(
             "herdr:pi".into(),
@@ -5641,6 +5643,7 @@ mod tests {
             session_ref: crate::agent_resume::AgentSessionRef::id("claude-session").unwrap(),
         });
         terminal.set_detected_state(Some(Agent::Pi), AgentState::Working);
+        terminal.agent_cwd = Some(PathBuf::from("/repo/worktree"));
 
         let mutation = terminal.set_detected_state_with_screen_signals_at(
             Some(Agent::Pi),
@@ -5653,6 +5656,7 @@ mod tests {
         );
 
         assert!(!mutation.session_ref_changed);
+        assert!(terminal.agent_cwd.is_none());
         assert_eq!(
             terminal
                 .persisted_agent_session
@@ -5674,6 +5678,7 @@ mod tests {
         });
         terminal.set_detected_state(Some(Agent::Codex), AgentState::Idle);
         terminal.set_detected_agent_process_at(Agent::Codex, Instant::now());
+        terminal.agent_cwd = Some(PathBuf::from("/repo/worktree"));
 
         terminal.clear_agent_runtime_identity_after_respawn();
 
@@ -5681,6 +5686,7 @@ mod tests {
         assert!(terminal.detected_agent.is_none());
         assert!(terminal.agent_name.is_none());
         assert!(terminal.persisted_agent_session.is_none());
+        assert!(terminal.agent_cwd.is_none());
         assert!(!terminal.respawn_shell_on_exit);
         assert!(!terminal.finish_agent_process_acquisition());
     }
