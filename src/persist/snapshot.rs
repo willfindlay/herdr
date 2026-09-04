@@ -353,12 +353,13 @@ fn capture_tab(
                     value: session.session_ref.value.clone(),
                 })
         });
-        // A resumed agent spawns in the saved cwd, so a pane that carries an
-        // agent session saves the agent's recorded cwd. Without a recorded
-        // agent cwd the pane saves its shell cwd like any other.
-        let cwd = agent_session
-            .as_ref()
-            .and_then(|_| terminal.and_then(|terminal| terminal.agent_cwd.clone()))
+        // A restored agent spawns in the saved cwd, so a pane that hosts an
+        // agent or carries a session to resume saves the agent's recorded
+        // cwd. Without a recorded agent cwd the pane saves its shell cwd like
+        // any other.
+        let cwd = terminal
+            .filter(|terminal| terminal.is_agent_terminal() || agent_session.is_some())
+            .and_then(|terminal| terminal.agent_cwd.clone())
             .or_else(|| tab.cwd_for_pane(*id, terminals, terminal_runtimes))
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| "/".into()));
         panes.insert(
