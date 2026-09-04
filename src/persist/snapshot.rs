@@ -1066,7 +1066,15 @@ mod tests {
     }
 
     #[test]
-    fn capture_keeps_shell_cwd_for_pane_without_agent_session() {
+    fn capture_persists_detected_agent_pane_at_its_agent_cwd() {
+        let mut state = single_terminal_state("/repo", Some("/repo/worktree"), None);
+        let terminal = state.terminals.values_mut().next().unwrap();
+        terminal.detected_agent = Some(crate::detect::Agent::Claude);
+        assert_eq!(captured_root_cwd(&state), PathBuf::from("/repo/worktree"));
+    }
+
+    #[test]
+    fn capture_keeps_shell_cwd_for_pane_without_agent() {
         let state = single_terminal_state("/repo", Some("/repo/worktree"), None);
         assert_eq!(captured_root_cwd(&state), PathBuf::from("/repo"));
     }
