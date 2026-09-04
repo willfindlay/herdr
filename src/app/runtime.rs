@@ -44,9 +44,10 @@ impl App {
     /// Records the foreground cwd of terminals that host an agent.
     ///
     /// Runs on a coarse deadline and reads process state from the OS, so it
-    /// stays out of the render and PTY paths. Nothing clears the value when
-    /// the agent exits. The foreground cwd is only readable on Unix, so on
-    /// other platforms the poll records nothing.
+    /// stays out of the render and PTY paths. The value is cleared when the
+    /// agent process exits or the terminal resets its agent identity. The
+    /// foreground cwd is only readable on Unix, so on other platforms the poll
+    /// records nothing.
     pub(crate) fn poll_agent_cwds(&mut self, now: Instant) {
         if now < self.next_agent_cwd_poll {
             return;
